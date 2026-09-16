@@ -1,8 +1,10 @@
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.enums import MilestoneStatus
 from app.core.exceptions import ContractValueExceeded
 from app.models.client import Client
 from app.models.contract import Contract
@@ -13,12 +15,24 @@ from app.schemas.contract import ContractCreate
 from app.schemas.milestone import MilestoneCreate
 
 
+def get_contract_by_id(
+    db: Session,
+    contract_id: int,
+) -> Contract | None:
+    return db.get(
+        Contract,
+        contract_id,
+    )
+
+
 def create_contract(
     db: Session,
     payload: ContractCreate,
 ) -> Contract:
     client = db.scalar(
-        select(Client).where(Client.email == payload.client.email)
+        select(Client).where(
+            Client.email == payload.client.email
+        )
     )
 
     if client is None:
@@ -69,7 +83,9 @@ def add_milestone(
                 func.sum(Milestone.amount),
                 Decimal("0.00"),
             )
-        ).where(Milestone.contract_id == contract.id)
+        ).where(
+            Milestone.contract_id == contract.id
+        )
     )
 
     allocated_amount = Decimal(allocated_amount)
@@ -77,11 +93,13 @@ def add_milestone(
     new_total = allocated_amount + payload.amount
 
     if new_total > contract.total_value:
-        remaining = contract.total_value - allocated_amount
+        remaining_amount = (
+            contract.total_value - allocated_amount
+        )
 
         raise ContractValueExceeded(
             f"Milestone amount exceeds remaining contract value. "
-            f"Remaining amount is {remaining}."
+            f"Remaining amount is {remaining_amount}."
         )
 
     milestone = Milestone(
@@ -108,7 +126,9 @@ def get_contract_summary(
                 func.sum(Milestone.amount),
                 Decimal("0.00"),
             )
-        ).where(Milestone.contract_id == contract.id)
+        ).where(
+            Milestone.contract_id == contract.id
+        )
     )
 
     total_paid = db.scalar(
@@ -119,16 +139,45 @@ def get_contract_summary(
             )
         )
         .join(Milestone)
-        .where(Milestone.contract_id == contract.id)
+        .where(
+            Milestone.contract_id == contract.id
+        )
+    )
+
+    overdue_count = db.scalar(
+        select(
+            func.count(Milestone.id)
+        )
+        .where(
+            Milestone.contract_id == contract.id
+        )
+        .where(
+            Milestone.deadline < date.today()
+        )
+        .where(
+            Milestone.status.not_in(
+                [
+                    MilestoneStatus.APPROVED,
+                    MilestoneStatus.PAID,
+                ]
+            )
+        )
     )
 
     allocated_amount = Decimal(allocated_amount)
     total_paid = Decimal(total_paid)
 
-    unallocated_amount = contract.total_value - allocated_amount
-    outstanding_amount = contract.total_value - total_paid
+    unallocated_amount = (
+        contract.total_value - allocated_amount
+    )
 
-    pending_amount = allocated_amount - total_paid
+    outstanding_amount = (
+        contract.total_value - total_paid
+    )
+
+    pending_amount = (
+        allocated_amount - total_paid
+    )
 
     return {
         "contract_id": contract.id,
@@ -139,4 +188,5 @@ def get_contract_summary(
         "total_paid": total_paid,
         "outstanding_amount": outstanding_amount,
         "pending_amount": pending_amount,
+        "overdue_milestones": overdue_count,
     }

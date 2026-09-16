@@ -20,3 +20,7 @@ class InvalidPaymentAmount(DomainError):
 
 class MilestoneNotApproved(DomainError):
     """Raised when an operation requires an approved milestone."""
+
+
+class MilestoneNotFullyPaid(DomainError):
+    """Raised when a milestone is marked paid before full payment is received."""

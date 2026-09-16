@@ -5,9 +5,20 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.enums import MilestoneStatus
+from app.core.exceptions import MilestoneNotFullyPaid
 from app.core.state_machine import validate_transition
 from app.models.milestone import Milestone
 from app.models.payment import Payment
+
+
+def get_milestone_by_id(
+    db: Session,
+    milestone_id: int,
+) -> Milestone | None:
+    return db.get(
+        Milestone,
+        milestone_id,
+    )
 
 
 def update_milestone_status(
@@ -20,10 +31,8 @@ def update_milestone_status(
         new_status,
     )
 
-    milestone.status = new_status
-
-    if new_status == MilestoneStatus.APPROVED:
-        amount_paid = db.scalar(
+    amount_paid = Decimal(
+        db.scalar(
             select(
                 func.coalesce(
                     func.sum(Payment.amount),
@@ -33,13 +42,63 @@ def update_milestone_status(
                 Payment.milestone_id == milestone.id
             )
         )
+    )
 
-        amount_paid = Decimal(amount_paid)
+    if (
+        new_status == MilestoneStatus.PAID
+        and amount_paid != milestone.amount
+    ):
+        raise MilestoneNotFullyPaid(
+            f"Milestone cannot be marked paid until full payment "
+            f"is received. Paid {amount_paid} of {milestone.amount}."
+        )
 
-        if amount_paid == milestone.amount:
-            milestone.status = MilestoneStatus.PAID
+    milestone.status = new_status
+
+    if (
+        new_status == MilestoneStatus.APPROVED
+        and amount_paid == milestone.amount
+    ):
+        milestone.status = MilestoneStatus.PAID
 
     db.commit()
     db.refresh(milestone)
 
     return milestone
+
+
+def get_overdue_milestones(
+    db: Session,
+) -> list[Milestone]:
+    excluded_statuses = [
+        MilestoneStatus.APPROVED,
+        MilestoneStatus.PAID,
+    ]
+
+    statement = (
+        select(Milestone)
+        .where(Milestone.deadline < date.today())
+        .where(
+            Milestone.status.not_in(
+                excluded_statuses
+            )
+        )
+        .order_by(Milestone.deadline.asc())
+    )
+
+    return list(
+        db.scalars(statement).all()
+    )
+
+
+def is_overdue(
+    milestone: Milestone,
+) -> bool:
+    return (
+        milestone.deadline < date.today()
+        and milestone.status
+        not in {
+            MilestoneStatus.APPROVED,
+            MilestoneStatus.PAID,
+        }
+    )
