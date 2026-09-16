@@ -1,19 +1,27 @@
 APP_CSS = """
 <style>
 
-/* -------------------------------------------------------
+/* =======================================================
    GLOBAL
-------------------------------------------------------- */
+======================================================= */
 
 [data-testid="stAppViewContainer"] {
     background:
-        radial-gradient(circle at top right, rgba(99,102,241,0.08), transparent 32%),
-        radial-gradient(circle at top left, rgba(14,165,233,0.06), transparent 28%),
+        radial-gradient(
+            circle at top right,
+            rgba(99, 102, 241, 0.08),
+            transparent 32%
+        ),
+        radial-gradient(
+            circle at top left,
+            rgba(14, 165, 233, 0.06),
+            transparent 28%
+        ),
         #f8fafc;
 }
 
 [data-testid="stHeader"] {
-    background: rgba(248, 250, 252, 0.8);
+    background: rgba(248, 250, 252, 0.82);
     backdrop-filter: blur(10px);
 }
 
@@ -23,7 +31,9 @@ APP_CSS = """
     padding-bottom: 4rem;
 }
 
-html, body, [class*="css"] {
+html,
+body,
+[class*="css"] {
     font-family:
         Inter,
         -apple-system,
@@ -32,9 +42,10 @@ html, body, [class*="css"] {
         sans-serif;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    SIDEBAR
-------------------------------------------------------- */
+======================================================= */
 
 [data-testid="stSidebar"] {
     background: #0f172a;
@@ -55,7 +66,7 @@ html, body, [class*="css"] {
 }
 
 .sidebar-brand-title {
-    color: white;
+    color: #ffffff;
     font-size: 1.25rem;
     font-weight: 800;
     letter-spacing: -0.03em;
@@ -87,18 +98,101 @@ html, body, [class*="css"] {
     line-height: 1.5;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
+   SIDEBAR INPUTS
+======================================================= */
+
+[data-testid="stSidebar"]
+[data-testid="stNumberInput"] input,
+
+[data-testid="stSidebar"]
+[data-testid="stTextInput"] input,
+
+[data-testid="stSidebar"]
+[data-testid="stDateInput"] input {
+    background: #111827 !important;
+    color: #f8fafc !important;
+    border: 1px solid #334155 !important;
+    border-radius: 12px !important;
+    caret-color: #ffffff !important;
+}
+
+[data-testid="stSidebar"] input::placeholder {
+    color: #64748b !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stSidebar"]
+[data-testid="stNumberInput"] button,
+
+[data-testid="stSidebar"]
+[data-testid="stDateInput"] button {
+    background: #111827 !important;
+    color: #e2e8f0 !important;
+    border-color: #334155 !important;
+}
+
+[data-testid="stSidebar"]
+[data-testid="stNumberInput"] button:hover,
+
+[data-testid="stSidebar"]
+[data-testid="stDateInput"] button:hover {
+    background: #1e293b !important;
+    color: #ffffff !important;
+}
+
+[data-testid="stSidebar"]
+[data-testid="stNumberInput"] button svg,
+
+[data-testid="stSidebar"]
+[data-testid="stDateInput"] button svg {
+    fill: #cbd5e1 !important;
+    color: #cbd5e1 !important;
+}
+
+[data-testid="stSidebar"]
+[data-testid="stNumberInput"] > div,
+
+[data-testid="stSidebar"]
+[data-testid="stTextInput"] > div,
+
+[data-testid="stSidebar"]
+[data-testid="stDateInput"] > div {
+    background: transparent !important;
+}
+
+[data-testid="stSidebar"] label {
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+}
+
+[data-testid="stSidebar"] .stCaption {
+    color: #94a3b8 !important;
+}
+
+
+/* =======================================================
    HERO
-------------------------------------------------------- */
+======================================================= */
 
 .hero {
     padding: 1.8rem 2rem;
     border-radius: 24px;
+
     background:
-        linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #312e81 100%);
+        linear-gradient(
+            135deg,
+            #0f172a 0%,
+            #1e293b 55%,
+            #312e81 100%
+        );
+
     margin-bottom: 1.6rem;
+
     box-shadow:
-        0 18px 45px rgba(15, 23, 42, 0.16);
+        0 18px 45px
+        rgba(15, 23, 42, 0.16);
 }
 
 .hero-eyebrow {
@@ -110,7 +204,7 @@ html, body, [class*="css"] {
 }
 
 .hero-title {
-    color: white;
+    color: #ffffff;
     font-size: 2.3rem;
     font-weight: 850;
     letter-spacing: -0.045em;
@@ -132,19 +226,29 @@ html, body, [class*="css"] {
 
 .hero-badge {
     display: inline-block;
-    background: rgba(255,255,255,0.08);
+
+    background:
+        rgba(255, 255, 255, 0.08);
+
     color: #e2e8f0;
-    border: 1px solid rgba(255,255,255,0.12);
+
+    border:
+        1px solid
+        rgba(255, 255, 255, 0.12);
+
     border-radius: 999px;
+
     padding: 0.38rem 0.75rem;
     margin-right: 0.35rem;
+
     font-size: 0.76rem;
     font-weight: 600;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    PAGE HEADERS
-------------------------------------------------------- */
+======================================================= */
 
 .page-title {
     color: #0f172a;
@@ -160,33 +264,46 @@ html, body, [class*="css"] {
     margin-bottom: 1.3rem;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    KPI CARDS
-------------------------------------------------------- */
+======================================================= */
 
 .kpi-card {
-    background: white;
-    border: 1px solid #e2e8f0;
+    background: #ffffff;
+
+    border:
+        1px solid #e2e8f0;
+
     border-radius: 18px;
+
     padding: 1.15rem 1.25rem;
+
     box-shadow:
-        0 4px 18px rgba(15, 23, 42, 0.045);
+        0 4px 18px
+        rgba(15, 23, 42, 0.045);
+
     min-height: 128px;
 }
 
 .kpi-label {
     color: #64748b;
+
     font-size: 0.78rem;
     font-weight: 650;
+
     text-transform: uppercase;
     letter-spacing: 0.055em;
 }
 
 .kpi-value {
     color: #0f172a;
+
     font-size: 1.75rem;
     font-weight: 820;
+
     letter-spacing: -0.04em;
+
     margin-top: 0.35rem;
 }
 
@@ -196,43 +313,59 @@ html, body, [class*="css"] {
     margin-top: 0.35rem;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    CONTENT CARDS
-------------------------------------------------------- */
+======================================================= */
 
 .panel {
-    background: white;
-    border: 1px solid #e2e8f0;
+    background: #ffffff;
+
+    border:
+        1px solid #e2e8f0;
+
     border-radius: 20px;
+
     padding: 1.4rem;
+
     box-shadow:
-        0 6px 20px rgba(15, 23, 42, 0.04);
+        0 6px 20px
+        rgba(15, 23, 42, 0.04);
+
     margin-bottom: 1rem;
 }
 
 .panel-title {
     color: #0f172a;
+
     font-size: 1rem;
     font-weight: 760;
+
     margin-bottom: 0.25rem;
 }
 
 .panel-subtitle {
     color: #64748b;
+
     font-size: 0.80rem;
+
     margin-bottom: 1rem;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    STATUS PILLS
-------------------------------------------------------- */
+======================================================= */
 
 .status-pill {
     display: inline-flex;
     align-items: center;
+
     border-radius: 999px;
+
     font-weight: 700;
     font-size: 0.73rem;
+
     padding: 0.35rem 0.7rem;
 }
 
@@ -266,15 +399,19 @@ html, body, [class*="css"] {
     color: #b91c1c;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    INFO ROWS
-------------------------------------------------------- */
+======================================================= */
 
 .info-row {
     display: flex;
     justify-content: space-between;
+
     padding: 0.72rem 0;
-    border-bottom: 1px solid #f1f5f9;
+
+    border-bottom:
+        1px solid #f1f5f9;
 }
 
 .info-row:last-child {
@@ -288,46 +425,68 @@ html, body, [class*="css"] {
 
 .info-value {
     color: #0f172a;
+
     font-size: 0.84rem;
     font-weight: 700;
 }
 
-/* -------------------------------------------------------
-   PROGRESS
-------------------------------------------------------- */
+
+/* =======================================================
+   PROGRESS BAR
+======================================================= */
 
 .progress-shell {
     height: 9px;
+
     background: #e2e8f0;
+
     border-radius: 999px;
+
     overflow: hidden;
+
     margin-top: 0.55rem;
 }
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #6366f1, #0ea5e9);
+
+    background:
+        linear-gradient(
+            90deg,
+            #6366f1,
+            #0ea5e9
+        );
+
     border-radius: 999px;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    WORKFLOW
-------------------------------------------------------- */
+======================================================= */
 
 .workflow {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+
     gap: 0.35rem;
+
     padding: 0.8rem 0;
 }
 
 .workflow-step {
     border-radius: 10px;
-    border: 1px solid #e2e8f0;
-    background: white;
+
+    border:
+        1px solid #e2e8f0;
+
+    background: #ffffff;
+
     padding: 0.45rem 0.65rem;
+
     color: #334155;
+
     font-size: 0.72rem;
     font-weight: 700;
 }
@@ -336,9 +495,10 @@ html, body, [class*="css"] {
     color: #94a3b8;
 }
 
-/* -------------------------------------------------------
-   INPUTS
-------------------------------------------------------- */
+
+/* =======================================================
+   MAIN FORM INPUTS
+======================================================= */
 
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
@@ -350,36 +510,52 @@ div[data-baseweb="select"] > div {
     border-radius: 12px !important;
 }
 
+
+/* =======================================================
+   BUTTONS
+======================================================= */
+
 .stButton > button,
 .stFormSubmitButton > button {
     border-radius: 12px;
+
     min-height: 46px;
+
     font-weight: 700;
+
     border: none;
 }
 
 .stButton > button[kind="primary"],
 .stFormSubmitButton > button[kind="primary"] {
-    background: linear-gradient(
-        135deg,
-        #4f46e5,
-        #6366f1
-    );
+    background:
+        linear-gradient(
+            135deg,
+            #4f46e5,
+            #6366f1
+        );
+
+    color: #ffffff;
 }
 
-/* -------------------------------------------------------
+
+/* =======================================================
    TABLE
-------------------------------------------------------- */
+======================================================= */
 
 [data-testid="stDataFrame"] {
     border-radius: 16px;
+
     overflow: hidden;
-    border: 1px solid #e2e8f0;
+
+    border:
+        1px solid #e2e8f0;
 }
 
-/* -------------------------------------------------------
-   SECTION SPACING
-------------------------------------------------------- */
+
+/* =======================================================
+   SECTION HELPERS
+======================================================= */
 
 .section-gap {
     height: 0.75rem;
@@ -388,6 +564,35 @@ div[data-baseweb="select"] > div {
 .small-muted {
     color: #64748b;
     font-size: 0.78rem;
+}
+
+
+/* =======================================================
+   RESPONSIVE
+======================================================= */
+
+@media (max-width: 900px) {
+
+    .hero {
+        padding: 1.4rem;
+        border-radius: 18px;
+    }
+
+    .hero-title {
+        font-size: 1.65rem;
+    }
+
+    .hero-subtitle {
+        font-size: 0.88rem;
+    }
+
+    .hero-badge {
+        margin-bottom: 0.35rem;
+    }
+
+    .kpi-value {
+        font-size: 1.4rem;
+    }
 }
 
 </style>
