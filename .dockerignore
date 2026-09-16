@@ -1,0 +1,12 @@
+.venv
+.git
+.gitignore
+__pycache__
+*.pyc
+.pytest_cache
+data/
+tests/
+streamlit_app/
+README.md
+.env
+.DS_Store
