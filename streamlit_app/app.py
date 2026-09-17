@@ -55,17 +55,30 @@ def money(value) -> str:
         return "$0.00"
 
 
-def api_error(exc: Exception) -> None:
+def api_error(
+    exc: Exception,
+    not_found_message: str | None = None,
+) -> None:
     if isinstance(exc, BackendUnavailable):
         st.error(
             "Backend API is unavailable. "
-            "Make sure FastAPI is running on port 8000."
+            "Check the API_BASE_URL configuration or backend deployment."
         )
         return
 
     if isinstance(exc, requests.HTTPError):
+        response = exc.response
+
+        if (
+            response is not None
+            and response.status_code == 404
+            and not_found_message
+        ):
+            st.warning(not_found_message)
+            return
+
         try:
-            payload = exc.response.json()
+            payload = response.json()
             detail = payload.get(
                 "detail",
                 "Request failed.",
@@ -98,6 +111,57 @@ def backend_is_available() -> bool:
         return True
     except Exception:
         return False
+
+
+def set_flash(
+    message: str,
+    kind: str = "success",
+) -> None:
+    st.session_state["_flash_message"] = message
+    st.session_state["_flash_kind"] = kind
+
+
+def show_flash() -> None:
+    message = st.session_state.pop(
+        "_flash_message",
+        None,
+    )
+
+    kind = st.session_state.pop(
+        "_flash_kind",
+        "success",
+    )
+
+    if not message:
+        return
+
+    if kind == "success":
+        st.success(message)
+    elif kind == "warning":
+        st.warning(message)
+    elif kind == "error":
+        st.error(message)
+    else:
+        st.info(message)
+
+
+# =========================================================
+# APPLY PENDING CONTEXT BEFORE SIDEBAR WIDGETS
+# =========================================================
+
+if "_next_contract_id" in st.session_state:
+    st.session_state["sidebar_contract_id"] = (
+        st.session_state.pop(
+            "_next_contract_id"
+        )
+    )
+
+if "_next_milestone_id" in st.session_state:
+    st.session_state["sidebar_milestone_id"] = (
+        st.session_state.pop(
+            "_next_milestone_id"
+        )
+    )
 
 
 # =========================================================
@@ -139,35 +203,19 @@ with st.sidebar:
     current_contract = st.number_input(
         "Contract ID",
         min_value=1,
-        value=int(
-            st.session_state.get(
-                "contract_id",
-                1,
-            )
-        ),
+        value=None,
         step=1,
+        placeholder="Enter contract ID",
         key="sidebar_contract_id",
     )
 
     current_milestone = st.number_input(
         "Milestone ID",
         min_value=1,
-        value=int(
-            st.session_state.get(
-                "milestone_id",
-                1,
-            )
-        ),
+        value=None,
         step=1,
+        placeholder="Enter milestone ID",
         key="sidebar_milestone_id",
-    )
-
-    st.session_state["contract_id"] = int(
-        current_contract
-    )
-
-    st.session_state["milestone_id"] = int(
-        current_milestone
     )
 
     st.markdown(
@@ -195,6 +243,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+show_flash()
+
 
 # =========================================================
 # BACKEND HEALTH
@@ -207,16 +257,15 @@ if backend_ok:
         "Backend API connected",
         icon="✅",
     )
+
 else:
     st.error(
-        "Backend API is offline. "
-        "Start FastAPI on http://127.0.0.1:8000"
+        "Backend API is currently unreachable."
     )
 
-    st.code(
-        "python -m uvicorn app.main:app "
-        "--host 127.0.0.1 --port 8000",
-        language="bash",
+    st.caption(
+        "Local development: make sure FastAPI is running. "
+        "Deployment: verify API_BASE_URL points to the Railway backend."
     )
 
     st.stop()
@@ -234,295 +283,328 @@ if page == "Overview":
         "for the selected contract.",
     )
 
-    contract_id = st.session_state["contract_id"]
-
-    try:
-        summary = get_contract_summary(
-            contract_id
-        )
-
-        total_value = Decimal(
-            str(summary["total_value"])
-        )
-
-        total_paid = Decimal(
-            str(summary["total_paid"])
-        )
-
-        allocated = Decimal(
-            str(summary["allocated_amount"])
-        )
-
-        unallocated = Decimal(
-            str(summary["unallocated_amount"])
-        )
-
-        outstanding = Decimal(
-            str(summary["outstanding_amount"])
-        )
-
-        pending = Decimal(
-            str(summary["pending_amount"])
-        )
-
-        overdue_count = int(
-            summary["overdue_milestones"]
-        )
-
-        paid_percent = (
-            float(
-                total_paid
-                / total_value
-                * 100
-            )
-            if total_value > 0
-            else 0.0
-        )
-
-        allocation_percent = (
-            float(
-                allocated
-                / total_value
-                * 100
-            )
-            if total_value > 0
-            else 0.0
-        )
-
-        # ---------------------------------------------
-        # KPI CARDS
-        # ---------------------------------------------
-
-        k1, k2, k3, k4 = st.columns(4)
-
-        with k1:
-            st.markdown(
-                kpi_card(
-                    "Contract Value",
-                    money(total_value),
-                    "Agreed contract value",
-                ),
-                unsafe_allow_html=True,
-            )
-
-        with k2:
-            st.markdown(
-                kpi_card(
-                    "Collected",
-                    money(total_paid),
-                    f"{paid_percent:.0f}% received",
-                ),
-                unsafe_allow_html=True,
-            )
-
-        with k3:
-            st.markdown(
-                kpi_card(
-                    "Outstanding",
-                    money(outstanding),
-                    "Remaining balance",
-                ),
-                unsafe_allow_html=True,
-            )
-
-        with k4:
-            st.markdown(
-                kpi_card(
-                    "Overdue",
-                    str(overdue_count),
-                    (
-                        "No overdue work"
-                        if overdue_count == 0
-                        else "Requires attention"
-                    ),
-                ),
-                unsafe_allow_html=True,
-            )
-
-        st.write("")
-
-        left, right = st.columns(
-            [1.15, 0.85]
-        )
-
-        # ---------------------------------------------
-        # LEFT COLUMN
-        # ---------------------------------------------
-
-        with left:
-
-            with st.container(
-                border=True
-            ):
-                st.subheader(
-                    "Contract allocation"
-                )
-
-                st.caption(
-                    "How much of the agreed contract "
-                    "value has been assigned to milestones."
-                )
-
-                st.markdown(
-                    info_row(
-                        "Allocated",
-                        money(allocated),
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    info_row(
-                        "Unallocated",
-                        money(unallocated),
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    progress_bar(
-                        allocation_percent
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.caption(
-                    f"{allocation_percent:.1f}% "
-                    "of contract value allocated"
-                )
-
-            with st.container(
-                border=True
-            ):
-                st.subheader(
-                    "Payment collection"
-                )
-
-                st.caption(
-                    "Cash received against the "
-                    "total contract value."
-                )
-
-                st.markdown(
-                    info_row(
-                        "Received",
-                        money(total_paid),
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    info_row(
-                        "Pending allocated work",
-                        money(pending),
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    info_row(
-                        "Outstanding contract balance",
-                        money(outstanding),
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.markdown(
-                    progress_bar(
-                        paid_percent
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.caption(
-                    f"{paid_percent:.1f}% collected"
-                )
-
-        # ---------------------------------------------
-        # RIGHT COLUMN
-        # ---------------------------------------------
-
-        with right:
-
-            with st.container(
-                border=True
-            ):
-                st.subheader(
-                    "Milestone lifecycle"
-                )
-
-                st.caption(
-                    "Transitions are controlled "
-                    "by the backend state machine."
-                )
-
-                st.markdown(
-                    workflow(),
-                    unsafe_allow_html=True,
-                )
-
-                st.caption(
-                    "Submitted work can branch into "
-                    "a disputed state and return for revision."
-                )
-
-            with st.container(
-                border=True
-            ):
-                st.subheader(
-                    "Deadline watch"
-                )
-
-                st.caption(
-                    "Past-deadline milestones that "
-                    "are not approved are overdue."
-                )
-
-                overdue = (
-                    get_overdue_milestones()
-                )
-
-                contract_overdue = [
-                    item
-                    for item in overdue
-                    if item["contract_id"]
-                    == contract_id
-                ]
-
-                if not contract_overdue:
-                    st.success(
-                        "No overdue milestones."
-                    )
-
-                else:
-                    for item in contract_overdue:
-
-                        st.markdown(
-                            f"**{item['title']}**"
-                        )
-
-                        st.caption(
-                            f"Due {item['deadline']} · "
-                            f"{item['days_overdue']} "
-                            "days overdue"
-                        )
-
-                        st.markdown(
-                            status_pill(
-                                item["status"]
-                            ),
-                            unsafe_allow_html=True,
-                        )
-
-                        st.divider()
-
-    except Exception as exc:
-        api_error(exc)
+    if current_contract is None:
 
         st.info(
-            "Choose an existing Contract ID "
-            "from the sidebar or create a new contract."
+            "No contract selected yet. "
+            "Create your first contract from 'New Contract', "
+            "or enter an existing Contract ID in the sidebar."
         )
+
+    else:
+        contract_id = int(current_contract)
+
+        try:
+            summary = get_contract_summary(
+                contract_id
+            )
+
+            total_value = Decimal(
+                str(
+                    summary["total_value"]
+                )
+            )
+
+            total_paid = Decimal(
+                str(
+                    summary["total_paid"]
+                )
+            )
+
+            allocated = Decimal(
+                str(
+                    summary["allocated_amount"]
+                )
+            )
+
+            unallocated = Decimal(
+                str(
+                    summary["unallocated_amount"]
+                )
+            )
+
+            outstanding = Decimal(
+                str(
+                    summary["outstanding_amount"]
+                )
+            )
+
+            pending = Decimal(
+                str(
+                    summary["pending_amount"]
+                )
+            )
+
+            overdue_count = int(
+                summary["overdue_milestones"]
+            )
+
+            paid_percent = (
+                float(
+                    total_paid
+                    / total_value
+                    * 100
+                )
+                if total_value > 0
+                else 0.0
+            )
+
+            allocation_percent = (
+                float(
+                    allocated
+                    / total_value
+                    * 100
+                )
+                if total_value > 0
+                else 0.0
+            )
+
+            # -----------------------------------------
+            # KPI CARDS
+            # -----------------------------------------
+
+            k1, k2, k3, k4 = st.columns(4)
+
+            with k1:
+                st.markdown(
+                    kpi_card(
+                        "Contract Value",
+                        money(total_value),
+                        "Agreed contract value",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            with k2:
+                st.markdown(
+                    kpi_card(
+                        "Collected",
+                        money(total_paid),
+                        f"{paid_percent:.0f}% received",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            with k3:
+                st.markdown(
+                    kpi_card(
+                        "Outstanding",
+                        money(outstanding),
+                        "Remaining balance",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            with k4:
+                st.markdown(
+                    kpi_card(
+                        "Overdue",
+                        str(overdue_count),
+                        (
+                            "No overdue work"
+                            if overdue_count == 0
+                            else "Requires attention"
+                        ),
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+            st.write("")
+
+            left, right = st.columns(
+                [1.15, 0.85]
+            )
+
+            # -----------------------------------------
+            # LEFT COLUMN
+            # -----------------------------------------
+
+            with left:
+
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Contract allocation"
+                    )
+
+                    st.caption(
+                        "How much of the agreed contract "
+                        "value has been assigned to milestones."
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Allocated",
+                            money(allocated),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Unallocated",
+                            money(unallocated),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        progress_bar(
+                            allocation_percent
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.caption(
+                        f"{allocation_percent:.1f}% "
+                        "of contract value allocated"
+                    )
+
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Payment collection"
+                    )
+
+                    st.caption(
+                        "Cash received against the "
+                        "total contract value."
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Received",
+                            money(total_paid),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Pending allocated work",
+                            money(pending),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Outstanding contract balance",
+                            money(outstanding),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        progress_bar(
+                            paid_percent
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.caption(
+                        f"{paid_percent:.1f}% collected"
+                    )
+
+            # -----------------------------------------
+            # RIGHT COLUMN
+            # -----------------------------------------
+
+            with right:
+
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Milestone lifecycle"
+                    )
+
+                    st.caption(
+                        "Transitions are controlled "
+                        "by the backend state machine."
+                    )
+
+                    st.markdown(
+                        workflow(),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.caption(
+                        "Submitted work can branch into "
+                        "a disputed state and return for revision."
+                    )
+
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Deadline watch"
+                    )
+
+                    st.caption(
+                        "Past-deadline milestones that "
+                        "are not approved are overdue."
+                    )
+
+                    overdue = (
+                        get_overdue_milestones()
+                    )
+
+                    contract_overdue = [
+                        item
+                        for item in overdue
+                        if int(
+                            item["contract_id"]
+                        )
+                        == contract_id
+                    ]
+
+                    if not contract_overdue:
+                        st.success(
+                            "No overdue milestones."
+                        )
+
+                    else:
+                        for item in contract_overdue:
+
+                            st.markdown(
+                                f"**{item['title']}**"
+                            )
+
+                            days_overdue = (
+                                item.get(
+                                    "days_overdue",
+                                    "Unknown",
+                                )
+                            )
+
+                            st.caption(
+                                f"Due {item['deadline']} · "
+                                f"{days_overdue} days overdue"
+                            )
+
+                            if "status" in item:
+                                st.markdown(
+                                    status_pill(
+                                        item[
+                                            "status"
+                                        ]
+                                    ),
+                                    unsafe_allow_html=True,
+                                )
+
+                            st.divider()
+
+        except Exception as exc:
+            api_error(
+                exc,
+                not_found_message=(
+                    f"Contract #{contract_id} was not found. "
+                    "Create a contract or select another ID."
+                ),
+            )
 
 
 # =========================================================
@@ -630,78 +712,77 @@ elif page == "New Contract":
 
         if submitted:
 
-            payload = {
-                "title": title,
-                "total_value": str(
-                    Decimal(
-                        str(total_value)
-                    )
-                ),
-                "start_date":
-                    start_date.isoformat(),
-                "client": {
-                    "name": client_name,
-                    "email": client_email,
-                },
-                "freelancer": {
-                    "name":
-                        freelancer_name,
-                    "email":
-                        freelancer_email,
-                },
-            }
-
-            try:
-                result = create_contract(
-                    payload
+            if not title.strip():
+                st.warning(
+                    "Contract title is required."
                 )
 
-                st.session_state[
-                    "contract_id"
-                ] = result["id"]
-
-                st.success(
-                    "Contract created successfully."
+            elif not client_name.strip():
+                st.warning(
+                    "Client name is required."
                 )
 
-                with st.container(
-                    border=True
-                ):
+            elif not client_email.strip():
+                st.warning(
+                    "Client email is required."
+                )
 
-                    st.subheader(
-                        "Contract ready"
+            elif not freelancer_name.strip():
+                st.warning(
+                    "Freelancer name is required."
+                )
+
+            elif not freelancer_email.strip():
+                st.warning(
+                    "Freelancer email is required."
+                )
+
+            else:
+                payload = {
+                    "title": title.strip(),
+                    "total_value": str(
+                        Decimal(
+                            str(total_value)
+                        )
+                    ),
+                    "start_date":
+                        start_date.isoformat(),
+                    "client": {
+                        "name":
+                            client_name.strip(),
+                        "email":
+                            client_email.strip(),
+                    },
+                    "freelancer": {
+                        "name":
+                            freelancer_name.strip(),
+                        "email":
+                            freelancer_email.strip(),
+                    },
+                }
+
+                try:
+                    result = create_contract(
+                        payload
                     )
 
-                    st.markdown(
-                        info_row(
-                            "Contract ID",
-                            result["id"],
-                        ),
-                        unsafe_allow_html=True,
+                    new_contract_id = int(
+                        result["id"]
                     )
 
-                    st.markdown(
-                        info_row(
-                            "Title",
-                            result["title"],
-                        ),
-                        unsafe_allow_html=True,
+                    st.session_state[
+                        "_next_contract_id"
+                    ] = new_contract_id
+
+                    set_flash(
+                        f"Contract #{new_contract_id} "
+                        "created successfully."
                     )
 
-                    st.markdown(
-                        info_row(
-                            "Value",
-                            money(
-                                result[
-                                    "total_value"
-                                ]
-                            ),
-                        ),
-                        unsafe_allow_html=True,
-                    )
+                    st.rerun()
 
-            except Exception as exc:
-                api_error(exc)
+                except Exception as exc:
+                    api_error(exc)
 
     with right:
 
@@ -748,160 +829,189 @@ elif page == "New Contract":
 
 elif page == "Milestones":
 
-    contract_id = (
-        st.session_state[
-            "contract_id"
-        ]
-    )
-
     section_header(
         "Milestone Planning",
-        f"Allocate Contract #{contract_id} "
-        "into controlled delivery stages.",
+        "Allocate contract value into "
+        "controlled delivery stages.",
     )
 
-    left, right = st.columns(
-        [1.2, 0.8]
-    )
+    if current_contract is None:
 
-    with left:
+        st.info(
+            "Select a Contract ID in the sidebar "
+            "or create a new contract first."
+        )
 
-        with st.container(
-            border=True
-        ):
+    else:
+        contract_id = int(
+            current_contract
+        )
 
-            with st.form(
-                "milestone_form"
-            ):
+        left, right = st.columns(
+            [1.2, 0.8]
+        )
 
-                title = st.text_input(
-                    "Milestone title",
-                    placeholder=(
-                        "e.g. REST API delivery"
-                    ),
-                )
-
-                c1, c2 = st.columns(2)
-
-                with c1:
-                    amount = (
-                        st.number_input(
-                            "Milestone amount",
-                            min_value=0.01,
-                            step=100.0,
-                        )
-                    )
-
-                with c2:
-                    deadline = (
-                        st.date_input(
-                            "Delivery deadline"
-                        )
-                    )
-
-                submitted = (
-                    st.form_submit_button(
-                        "Add milestone",
-                        type="primary",
-                        use_container_width=True,
-                    )
-                )
-
-        if submitted:
-
-            payload = {
-                "title": title,
-                "amount": str(
-                    Decimal(str(amount))
-                ),
-                "deadline":
-                    deadline.isoformat(),
-            }
-
-            try:
-                result = add_milestone(
-                    contract_id,
-                    payload,
-                )
-
-                st.session_state[
-                    "milestone_id"
-                ] = result["id"]
-
-                st.success(
-                    f"Milestone #{result['id']} "
-                    "created successfully."
-                )
-
-                st.markdown(
-                    status_pill(
-                        result["status"]
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-            except Exception as exc:
-                api_error(exc)
-
-    with right:
-
-        try:
-            summary = (
-                get_contract_summary(
-                    contract_id
-                )
-            )
+        with left:
 
             with st.container(
                 border=True
             ):
+
                 st.subheader(
-                    "Available allocation"
+                    f"Contract #{contract_id}"
                 )
 
-                st.caption(
-                    "Contract value available "
-                    "for additional milestones."
-                )
+                with st.form(
+                    "milestone_form"
+                ):
 
-                st.markdown(
-                    info_row(
-                        "Contract value",
-                        money(
-                            summary[
-                                "total_value"
-                            ]
+                    title = st.text_input(
+                        "Milestone title",
+                        placeholder=(
+                            "e.g. REST API delivery"
                         ),
-                    ),
-                    unsafe_allow_html=True,
-                )
+                    )
 
-                st.markdown(
-                    info_row(
-                        "Allocated",
-                        money(
-                            summary[
-                                "allocated_amount"
-                            ]
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+                        amount = (
+                            st.number_input(
+                                "Milestone amount",
+                                min_value=0.01,
+                                step=100.0,
+                            )
+                        )
+
+                    with c2:
+                        deadline = (
+                            st.date_input(
+                                "Delivery deadline"
+                            )
+                        )
+
+                    submitted = (
+                        st.form_submit_button(
+                            "Add milestone",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    )
+
+            if submitted:
+
+                if not title.strip():
+                    st.warning(
+                        "Milestone title is required."
+                    )
+
+                else:
+                    payload = {
+                        "title": title.strip(),
+                        "amount": str(
+                            Decimal(
+                                str(amount)
+                            )
                         ),
-                    ),
-                    unsafe_allow_html=True,
+                        "deadline":
+                            deadline.isoformat(),
+                    }
+
+                    try:
+                        result = add_milestone(
+                            contract_id,
+                            payload,
+                        )
+
+                        new_milestone_id = int(
+                            result["id"]
+                        )
+
+                        st.session_state[
+                            "_next_milestone_id"
+                        ] = new_milestone_id
+
+                        set_flash(
+                            f"Milestone #{new_milestone_id} "
+                            "created successfully."
+                        )
+
+                        st.rerun()
+
+                    except Exception as exc:
+                        api_error(
+                            exc,
+                            not_found_message=(
+                                f"Contract #{contract_id} "
+                                "was not found."
+                            ),
+                        )
+
+        with right:
+
+            try:
+                summary = (
+                    get_contract_summary(
+                        contract_id
+                    )
                 )
 
-                st.markdown(
-                    info_row(
-                        "Available",
-                        money(
-                            summary[
-                                "unallocated_amount"
-                            ]
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Available allocation"
+                    )
+
+                    st.caption(
+                        "Contract value available "
+                        "for additional milestones."
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Contract value",
+                            money(
+                                summary[
+                                    "total_value"
+                                ]
+                            ),
                         ),
-                    ),
-                    unsafe_allow_html=True,
-                )
+                        unsafe_allow_html=True,
+                    )
 
-        except Exception as exc:
-            api_error(exc)
+                    st.markdown(
+                        info_row(
+                            "Allocated",
+                            money(
+                                summary[
+                                    "allocated_amount"
+                                ]
+                            ),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Available",
+                            money(
+                                summary[
+                                    "unallocated_amount"
+                                ]
+                            ),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+            except Exception as exc:
+                api_error(
+                    exc,
+                    not_found_message=(
+                        f"Contract #{contract_id} "
+                        "was not found."
+                    ),
+                )
 
 
 # =========================================================
@@ -910,173 +1020,200 @@ elif page == "Milestones":
 
 elif page == "Payments":
 
-    milestone_id = (
-        st.session_state[
-            "milestone_id"
-        ]
-    )
-
     section_header(
         "Payment Ledger",
-        f"Record staged payments against "
-        f"Milestone #{milestone_id}.",
+        "Record staged payments and track "
+        "the remaining milestone balance.",
     )
 
-    left, right = st.columns(
-        [1.05, 0.95]
-    )
+    if current_milestone is None:
 
-    with left:
+        st.info(
+            "Select a Milestone ID in the sidebar "
+            "or create a milestone first."
+        )
 
-        with st.container(
-            border=True
-        ):
+    else:
+        milestone_id = int(
+            current_milestone
+        )
 
-            with st.form(
-                "payment_form"
-            ):
+        left, right = st.columns(
+            [1.05, 0.95]
+        )
 
-                amount = (
-                    st.number_input(
-                        "Payment amount",
-                        min_value=0.01,
-                        step=50.0,
-                    )
-                )
-
-                reference = (
-                    st.text_input(
-                        "Payment reference",
-                        placeholder=(
-                            "e.g. BANK-2026-001"
-                        ),
-                    )
-                )
-
-                submitted = (
-                    st.form_submit_button(
-                        "Record payment",
-                        type="primary",
-                        use_container_width=True,
-                    )
-                )
-
-        if submitted:
-
-            payload = {
-                "amount": str(
-                    Decimal(str(amount))
-                ),
-                "reference":
-                    reference or None,
-            }
-
-            try:
-                record_payment(
-                    milestone_id,
-                    payload,
-                )
-
-                st.success(
-                    "Payment recorded successfully."
-                )
-
-            except Exception as exc:
-                api_error(exc)
-
-    with right:
-
-        try:
-            payment = (
-                get_payment_summary(
-                    milestone_id
-                )
-            )
-
-            milestone_amount = Decimal(
-                str(
-                    payment[
-                        "milestone_amount"
-                    ]
-                )
-            )
-
-            amount_paid = Decimal(
-                str(
-                    payment[
-                        "amount_paid"
-                    ]
-                )
-            )
-
-            outstanding = Decimal(
-                str(
-                    payment[
-                        "outstanding_amount"
-                    ]
-                )
-            )
-
-            percent = (
-                float(
-                    amount_paid
-                    / milestone_amount
-                    * 100
-                )
-                if milestone_amount > 0
-                else 0.0
-            )
+        with left:
 
             with st.container(
                 border=True
             ):
+
                 st.subheader(
-                    "Payment position"
+                    f"Milestone #{milestone_id}"
                 )
 
-                st.markdown(
-                    info_row(
-                        "Milestone value",
-                        money(
-                            milestone_amount
+                with st.form(
+                    "payment_form"
+                ):
+
+                    amount = (
+                        st.number_input(
+                            "Payment amount",
+                            min_value=0.01,
+                            step=50.0,
+                        )
+                    )
+
+                    reference = (
+                        st.text_input(
+                            "Payment reference",
+                            placeholder=(
+                                "e.g. BANK-2026-001"
+                            ),
+                        )
+                    )
+
+                    submitted = (
+                        st.form_submit_button(
+                            "Record payment",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    )
+
+            if submitted:
+
+                payload = {
+                    "amount": str(
+                        Decimal(
+                            str(amount)
+                        )
+                    ),
+                    "reference":
+                        reference.strip()
+                        or None,
+                }
+
+                try:
+                    record_payment(
+                        milestone_id,
+                        payload,
+                    )
+
+                    set_flash(
+                        "Payment recorded successfully."
+                    )
+
+                    st.rerun()
+
+                except Exception as exc:
+                    api_error(
+                        exc,
+                        not_found_message=(
+                            f"Milestone #{milestone_id} "
+                            "was not found."
                         ),
-                    ),
-                    unsafe_allow_html=True,
+                    )
+
+        with right:
+
+            try:
+                payment = (
+                    get_payment_summary(
+                        milestone_id
+                    )
                 )
 
-                st.markdown(
-                    info_row(
-                        "Received",
-                        money(
-                            amount_paid
+                milestone_amount = Decimal(
+                    str(
+                        payment[
+                            "milestone_amount"
+                        ]
+                    )
+                )
+
+                amount_paid = Decimal(
+                    str(
+                        payment[
+                            "amount_paid"
+                        ]
+                    )
+                )
+
+                outstanding = Decimal(
+                    str(
+                        payment[
+                            "outstanding_amount"
+                        ]
+                    )
+                )
+
+                percent = (
+                    float(
+                        amount_paid
+                        / milestone_amount
+                        * 100
+                    )
+                    if milestone_amount > 0
+                    else 0.0
+                )
+
+                with st.container(
+                    border=True
+                ):
+                    st.subheader(
+                        "Payment position"
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Milestone value",
+                            money(
+                                milestone_amount
+                            ),
                         ),
-                    ),
-                    unsafe_allow_html=True,
-                )
+                        unsafe_allow_html=True,
+                    )
 
-                st.markdown(
-                    info_row(
-                        "Outstanding",
-                        money(
-                            outstanding
+                    st.markdown(
+                        info_row(
+                            "Received",
+                            money(
+                                amount_paid
+                            ),
                         ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        info_row(
+                            "Outstanding",
+                            money(
+                                outstanding
+                            ),
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.markdown(
+                        progress_bar(
+                            percent
+                        ),
+                        unsafe_allow_html=True,
+                    )
+
+                    st.caption(
+                        f"{percent:.1f}% collected"
+                    )
+
+            except Exception as exc:
+                api_error(
+                    exc,
+                    not_found_message=(
+                        f"Milestone #{milestone_id} "
+                        "was not found."
                     ),
-                    unsafe_allow_html=True,
                 )
-
-                st.markdown(
-                    progress_bar(
-                        percent
-                    ),
-                    unsafe_allow_html=True,
-                )
-
-                st.caption(
-                    f"{percent:.1f}% collected"
-                )
-
-        except Exception as exc:
-            api_error(exc)
 
 
 # =========================================================
@@ -1085,120 +1222,134 @@ elif page == "Payments":
 
 elif page == "Workflow":
 
-    milestone_id = (
-        st.session_state[
-            "milestone_id"
-        ]
-    )
-
     section_header(
         "Milestone Workflow",
-        f"Control lifecycle transitions "
-        f"for Milestone #{milestone_id}.",
+        "Move work through controlled lifecycle "
+        "states enforced by the backend.",
     )
 
-    with st.container(
-        border=True
-    ):
-        st.subheader(
-            "Standard lifecycle"
+    if current_milestone is None:
+
+        st.info(
+            "Select a Milestone ID in the sidebar "
+            "or create a milestone first."
         )
 
-        st.markdown(
-            workflow(),
-            unsafe_allow_html=True,
+    else:
+        milestone_id = int(
+            current_milestone
         )
-
-        st.caption(
-            "Submitted work can enter a disputed "
-            "branch and return for revision."
-        )
-
-    left, right = st.columns(2)
-
-    with left:
 
         with st.container(
             border=True
         ):
-
             st.subheader(
-                "Apply transition"
+                "Standard lifecycle"
             )
 
-            new_status = st.selectbox(
-                "New milestone status",
-                [
-                    "in_progress",
-                    "submitted",
-                    "approved",
-                    "paid",
-                    "disputed",
-                ],
-            )
-
-            if st.button(
-                "Apply transition",
-                type="primary",
-                use_container_width=True,
-            ):
-
-                try:
-                    result = (
-                        update_milestone_status(
-                            milestone_id,
-                            new_status,
-                        )
-                    )
-
-                    st.success(
-                        "Transition accepted."
-                    )
-
-                    st.markdown(
-                        status_pill(
-                            result["status"]
-                        ),
-                        unsafe_allow_html=True,
-                    )
-
-                except Exception as exc:
-                    api_error(exc)
-
-    with right:
-
-        with st.container(
-            border=True
-        ):
-
-            st.subheader(
-                "State machine rules"
+            st.markdown(
+                workflow(),
+                unsafe_allow_html=True,
             )
 
             st.caption(
-                "Status is not a free-text field."
+                "Submitted work can enter a disputed "
+                "branch and return for revision."
             )
 
-            st.markdown(
-                info_row(
-                    "pending → paid",
-                    "Rejected",
-                ),
-                unsafe_allow_html=True,
-            )
+        left, right = st.columns(2)
 
-            st.markdown(
-                info_row(
-                    "submitted → approved",
-                    "Allowed",
-                ),
-                unsafe_allow_html=True,
-            )
+        with left:
 
-            st.markdown(
-                info_row(
-                    "approved → paid",
-                    "Requires full payment",
-                ),
-                unsafe_allow_html=True,
-            )
+            with st.container(
+                border=True
+            ):
+
+                st.subheader(
+                    f"Milestone #{milestone_id}"
+                )
+
+                new_status = st.selectbox(
+                    "New milestone status",
+                    [
+                        "in_progress",
+                        "submitted",
+                        "approved",
+                        "paid",
+                        "disputed",
+                    ],
+                )
+
+                if st.button(
+                    "Apply transition",
+                    type="primary",
+                    use_container_width=True,
+                ):
+
+                    try:
+                        result = (
+                            update_milestone_status(
+                                milestone_id,
+                                new_status,
+                            )
+                        )
+
+                        st.success(
+                            "Transition accepted."
+                        )
+
+                        st.markdown(
+                            status_pill(
+                                result[
+                                    "status"
+                                ]
+                            ),
+                            unsafe_allow_html=True,
+                        )
+
+                    except Exception as exc:
+                        api_error(
+                            exc,
+                            not_found_message=(
+                                f"Milestone #{milestone_id} "
+                                "was not found."
+                            ),
+                        )
+
+        with right:
+
+            with st.container(
+                border=True
+            ):
+
+                st.subheader(
+                    "State machine rules"
+                )
+
+                st.caption(
+                    "Status is not a free-text field."
+                )
+
+                st.markdown(
+                    info_row(
+                        "pending → paid",
+                        "Rejected",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    info_row(
+                        "submitted → approved",
+                        "Allowed",
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+                st.markdown(
+                    info_row(
+                        "approved → paid",
+                        "Requires full payment",
+                    ),
+                    unsafe_allow_html=True,
+                )
