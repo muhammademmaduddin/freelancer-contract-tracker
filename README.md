@@ -51,3 +51,21 @@ Milestone 2: $2,000
 Milestone 3: $1,000
 
 Total allocated: $5,000
+
+# Freelancer Contract & Milestone Payment Tracker
+
+**Author:** Muhammad Emmaduddin  
+**Role:** Backend Developer  
+**Project Type:** Production-style backend portfolio project
+
+A production-style backend system for managing freelance contracts, milestone lifecycles, staged payments, deadlines, and disputes.
+
+---
+
+## Author
+
+**Muhammad Emmaduddin**
+
+Backend-focused software developer building practical systems around real-world business problems.
+
+This project was inspired by my own experience working as a freelancer and dealing with milestone-based delivery, partial payments, deadlines, and client disputes.
