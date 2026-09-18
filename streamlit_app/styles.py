@@ -202,6 +202,21 @@ main {
     color: #94a3b8 !important;
 }
 
+[data-testid="stSidebar"] .stButton > button {
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+    border: 1px solid #334155 !important;
+    border-radius: 12px !important;
+    min-height: 40px !important;
+    font-weight: 700 !important;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: #334155 !important;
+    color: #ffffff !important;
+    border-color: #475569 !important;
+}
+
 
 /* =======================================================
    HERO

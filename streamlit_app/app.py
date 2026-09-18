@@ -256,8 +256,6 @@ def load_context(
 def render_sidebar_context(
     contract_id: int | None,
     milestone_id: int | None,
-    contract_invalid: bool,
-    milestone_invalid: bool,
     context: dict,
 ) -> None:
     st.markdown(
@@ -266,18 +264,10 @@ def render_sidebar_context(
     )
 
     if contract_id is None:
-        if contract_invalid:
-            st.markdown(
-                '<div class="context-warning">'
-                'Enter a positive whole-number contract ID.'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                '<div class="context-empty">No contract selected.</div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            '<div class="context-empty">No contract selected.</div>',
+            unsafe_allow_html=True,
+        )
     elif context["contract_summary"] is None:
         st.markdown(
             (
@@ -307,18 +297,10 @@ def render_sidebar_context(
         )
 
     if milestone_id is None:
-        if milestone_invalid:
-            st.markdown(
-                '<div class="context-warning">'
-                'Enter a positive whole-number milestone ID.'
-                '</div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                '<div class="context-empty">No milestone selected.</div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            '<div class="context-empty">No milestone selected.</div>',
+            unsafe_allow_html=True,
+        )
     elif context["milestone"] is None:
         st.markdown(
             (
@@ -379,21 +361,274 @@ def display_status(status: str) -> str:
     return str(status or "unknown").replace("_", " ").title()
 
 
-if "_next_contract_id" in st.session_state:
-    next_contract_id = st.session_state.pop(
-        "_next_contract_id"
-    )
-    st.session_state["sidebar_contract_id"] = str(
+def normalize_active_id(value) -> int | None:
+    parsed, invalid = parse_positive_id(value)
+    return None if invalid else parsed
+
+
+next_contract_id = st.session_state.pop(
+    "_next_contract_id",
+    None,
+)
+
+if next_contract_id is not None:
+    st.session_state["active_contract_id"] = normalize_active_id(
         next_contract_id
     )
+    st.session_state["active_milestone_id"] = None
+    st.session_state["milestone_id_input"] = ""
 
-if "_next_milestone_id" in st.session_state:
-    next_milestone_id = st.session_state.pop(
-        "_next_milestone_id"
+next_milestone_id = st.session_state.pop(
+    "_next_milestone_id",
+    None,
+)
+
+if next_milestone_id is not None:
+    st.session_state["active_milestone_id"] = normalize_active_id(
+        next_milestone_id
     )
-    st.session_state["sidebar_milestone_id"] = (
-        "" if next_milestone_id is None else str(next_milestone_id)
+    st.session_state["milestone_id_input"] = str(
+        next_milestone_id
     )
+
+next_milestone_input = st.session_state.pop(
+    "_next_milestone_input",
+    None,
+)
+
+if next_milestone_input is not None:
+    st.session_state["milestone_id_input"] = str(
+        next_milestone_input
+    )
+
+form_reset_keys = {
+    "new_contract_title": "",
+    "new_contract_value": 0.01,
+    "new_client_name": "",
+    "new_client_email": "",
+    "new_freelancer_name": "",
+    "new_freelancer_email": "",
+    "milestone_title": "",
+    "milestone_amount": 0.01,
+}
+
+for form_key, form_value in form_reset_keys.items():
+    next_form_key = f"_next_{form_key}"
+    if next_form_key in st.session_state:
+        st.session_state[form_key] = st.session_state.pop(
+            next_form_key
+        )
+    else:
+        st.session_state.setdefault(
+            form_key,
+            form_value,
+        )
+
+active_contract_id = normalize_active_id(
+    st.session_state.get(
+        "active_contract_id",
+        None,
+    )
+)
+active_milestone_id = normalize_active_id(
+    st.session_state.get(
+        "active_milestone_id",
+        None,
+    )
+)
+
+if active_contract_id is None:
+    active_milestone_id = None
+
+st.session_state["active_contract_id"] = active_contract_id
+st.session_state["active_milestone_id"] = active_milestone_id
+
+
+def set_context_notice(
+    message: str | None,
+    kind: str = "warning",
+) -> None:
+    if message:
+        st.session_state["_context_notice"] = message
+        st.session_state["_context_notice_kind"] = kind
+    else:
+        st.session_state.pop(
+            "_context_notice",
+            None,
+        )
+        st.session_state.pop(
+            "_context_notice_kind",
+            None,
+        )
+
+
+def load_contract_from_input() -> None:
+    raw_id = str(
+        st.session_state.get(
+            "contract_id_input",
+            "",
+        )
+    ).strip()
+    contract_id, invalid = parse_positive_id(raw_id)
+
+    if invalid or contract_id is None:
+        set_context_notice(
+            "Enter a positive whole-number contract ID."
+        )
+        return
+
+    try:
+        get_contract_summary(contract_id)
+    except requests.HTTPError as exc:
+        if (
+            exc.response is not None
+            and exc.response.status_code == 404
+        ):
+            set_context_notice(
+                f"Contract #{contract_id} was not found."
+            )
+        else:
+            set_context_notice(
+                "Contract details are temporarily unavailable."
+            )
+        return
+    except Exception:
+        set_context_notice(
+            "Contract details are temporarily unavailable."
+        )
+        return
+
+    st.session_state["active_contract_id"] = contract_id
+    st.session_state["active_milestone_id"] = None
+    st.session_state["_next_milestone_input"] = ""
+    set_context_notice(None)
+    st.rerun()
+
+
+def load_milestone_from_input() -> None:
+    contract_id = normalize_active_id(
+        st.session_state.get(
+            "active_contract_id",
+            None,
+        )
+    )
+
+    if contract_id is None:
+        set_context_notice(
+            "Load a contract before loading a milestone."
+        )
+        return
+
+    raw_id = str(
+        st.session_state.get(
+            "milestone_id_input",
+            "",
+        )
+    ).strip()
+    milestone_id, invalid = parse_positive_id(raw_id)
+
+    if invalid or milestone_id is None:
+        set_context_notice(
+            "Enter a positive whole-number milestone ID."
+        )
+        return
+
+    try:
+        milestone = get_milestone(milestone_id)
+    except requests.HTTPError as exc:
+        if (
+            exc.response is not None
+            and exc.response.status_code == 404
+        ):
+            set_context_notice(
+                f"Milestone #{milestone_id} was not found."
+            )
+        else:
+            set_context_notice(
+                "Milestone details are temporarily unavailable."
+            )
+        return
+    except Exception:
+        set_context_notice(
+            "Milestone details are temporarily unavailable."
+        )
+        return
+
+    try:
+        milestone_contract_id = int(
+            milestone["contract_id"]
+        )
+    except (KeyError, TypeError, ValueError):
+        set_context_notice(
+            "Milestone details are temporarily unavailable."
+        )
+        return
+
+    if milestone_contract_id != contract_id:
+        set_context_notice(
+            f"Milestone #{milestone_id} belongs to Contract "
+            f"#{milestone_contract_id}."
+        )
+        return
+
+    st.session_state["active_milestone_id"] = milestone_id
+    set_context_notice(None)
+    st.rerun()
+
+
+def resolve_context(
+    contract_id: int | None,
+    milestone_id: int | None,
+) -> tuple[int | None, int | None, dict]:
+    context = load_context(
+        contract_id,
+        milestone_id,
+    )
+    resolved_contract_id = (
+        contract_id
+        if context["contract_summary"] is not None
+        else None
+    )
+    resolved_milestone_id = (
+        milestone_id
+        if context["milestone"] is not None
+        else None
+    )
+
+    if resolved_milestone_id is not None:
+        try:
+            milestone_contract_id = int(
+                context["milestone"]["contract_id"]
+            )
+        except (KeyError, TypeError, ValueError):
+            milestone_contract_id = -1
+
+        if (
+            resolved_contract_id is None
+            or milestone_contract_id != resolved_contract_id
+        ):
+            resolved_milestone_id = None
+            context["context_warning"] = (
+                "The selected milestone belongs to a different contract."
+            )
+
+    if (
+        resolved_contract_id != contract_id
+        or resolved_milestone_id != milestone_id
+    ):
+        st.session_state["active_contract_id"] = (
+            resolved_contract_id
+        )
+        st.session_state["active_milestone_id"] = (
+            resolved_milestone_id
+        )
+
+    return (
+        resolved_contract_id,
+        resolved_milestone_id,
+        context,
+    )
+
 
 backend_ok = backend_is_available()
 
@@ -425,62 +660,106 @@ with st.sidebar:
     )
 
     st.divider()
+    st.caption("Change context")
 
     contract_input_value = st.session_state.get(
-        "sidebar_contract_id",
+        "contract_id_input",
         "",
     )
     milestone_input_value = st.session_state.get(
-        "sidebar_milestone_id",
+        "milestone_id_input",
         "",
     )
 
-    contract_input = st.text_input(
-        "Contract ID",
-        value=(
+    contract_input_args = {
+        "placeholder": "Enter contract ID",
+        "key": "contract_id_input",
+    }
+    if "contract_id_input" not in st.session_state:
+        contract_input_args["value"] = (
             "" if contract_input_value is None
             else str(contract_input_value)
-        ),
-        placeholder="Enter contract ID",
-        key="sidebar_contract_id",
+        )
+    st.text_input(
+        "Contract ID",
+        **contract_input_args,
     )
-    milestone_input = st.text_input(
-        "Milestone ID",
-        value=(
+
+    if st.button(
+        "Load Contract",
+        use_container_width=True,
+        key="load_contract_button",
+    ):
+        load_contract_from_input()
+
+    milestone_input_args = {
+        "placeholder": "Enter milestone ID",
+        "key": "milestone_id_input",
+    }
+    if "milestone_id_input" not in st.session_state:
+        milestone_input_args["value"] = (
             "" if milestone_input_value is None
             else str(milestone_input_value)
-        ),
-        placeholder="Enter milestone ID",
-        key="sidebar_milestone_id",
-    )
-
-    current_contract, contract_invalid = parse_positive_id(
-        contract_input
-    )
-    current_milestone, milestone_invalid = parse_positive_id(
-        milestone_input
-    )
-
-    context = (
-        load_context(
-            current_contract,
-            current_milestone,
         )
-        if backend_ok
-        else {
+    st.text_input(
+        "Milestone ID",
+        **milestone_input_args,
+    )
+
+    if st.button(
+        "Load Milestone",
+        use_container_width=True,
+        key="load_milestone_button",
+    ):
+        load_milestone_from_input()
+
+    context_notice = st.session_state.get(
+        "_context_notice",
+        None,
+    )
+
+    if context_notice:
+        notice_kind = st.session_state.get(
+            "_context_notice_kind",
+            "warning",
+        )
+        notice_class = (
+            "context-warning"
+            if notice_kind == "warning"
+            else "context-empty"
+        )
+        st.markdown(
+            (
+                f'<div class="{notice_class}">'
+                f'{html.escape(str(context_notice))}'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+
+    if backend_ok:
+        (
+            active_contract_id,
+            active_milestone_id,
+            context,
+        ) = resolve_context(
+            active_contract_id,
+            active_milestone_id,
+        )
+    else:
+        active_contract_id = None
+        active_milestone_id = None
+        context = {
             "contract_summary": None,
             "contract_warning": None,
             "milestone": None,
             "milestone_warning": None,
             "context_warning": None,
         }
-    )
 
     render_sidebar_context(
-        current_contract,
-        current_milestone,
-        contract_invalid,
-        milestone_invalid,
+        active_contract_id,
+        active_milestone_id,
         context,
     )
 
@@ -531,21 +810,19 @@ if page == "Overview":
         unsafe_allow_html=True,
     )
 
-    if current_contract is None:
-        if contract_invalid:
-            st.warning(
-                f"Contract #{contract_input.strip()} was not found."
-            )
+    if active_contract_id is None:
+        if context["contract_warning"]:
+            st.warning(context["contract_warning"])
         else:
             st.info(
                 "No contract selected yet. "
                 "Create your first contract from 'New Contract', "
-                "or enter an existing Contract ID in the sidebar."
+                "or enter an ID in the sidebar."
             )
     elif context["contract_summary"] is None:
         st.warning(
             context["contract_warning"]
-            or f"Contract #{current_contract} was not found."
+            or f"Contract #{active_contract_id} was not found."
         )
     else:
         summary = context["contract_summary"]
@@ -732,7 +1009,7 @@ if page == "Overview":
                             -1,
                         )
                     )
-                    == current_contract
+                    == active_contract_id
                 ):
                     active_status = str(
                         selected_milestone.get(
@@ -773,7 +1050,7 @@ if page == "Overview":
                         if int(
                             item["contract_id"]
                         )
-                        == current_contract
+                        == active_contract_id
                     ]
 
                     if not contract_overdue:
@@ -968,32 +1245,38 @@ elif page == "New Contract":
                             result["id"]
                         )
                         st.session_state[
+                            "active_contract_id"
+                        ] = new_contract_id
+                        st.session_state[
+                            "active_milestone_id"
+                        ] = None
+                        st.session_state[
                             "_next_contract_id"
                         ] = new_contract_id
                         st.session_state[
                             "_next_milestone_id"
                         ] = None
-                        st.session_state.pop(
-                            "sidebar_milestone_id",
-                            None,
-                        )
                         st.session_state[
-                            "new_contract_title"
+                            "_next_milestone_input"
+                        ] = ""
+                        set_context_notice(None)
+                        st.session_state[
+                            "_next_new_contract_title"
                         ] = ""
                         st.session_state[
-                            "new_contract_value"
-                        ] = 0.0
+                            "_next_new_contract_value"
+                        ] = 0.01
                         st.session_state[
-                            "new_client_name"
+                            "_next_new_client_name"
                         ] = ""
                         st.session_state[
-                            "new_client_email"
+                            "_next_new_client_email"
                         ] = ""
                         st.session_state[
-                            "new_freelancer_name"
+                            "_next_new_freelancer_name"
                         ] = ""
                         st.session_state[
-                            "new_freelancer_email"
+                            "_next_new_freelancer_email"
                         ] = ""
                         set_flash(
                             f"Contract #{new_contract_id} "
@@ -1047,11 +1330,9 @@ elif page == "Milestones":
         unsafe_allow_html=True,
     )
 
-    if current_contract is None:
-        if contract_invalid:
-            st.warning(
-                f"Contract #{contract_input.strip()} was not found."
-            )
+    if active_contract_id is None:
+        if context["contract_warning"]:
+            st.warning(context["contract_warning"])
         else:
             st.info(
                 "Select a Contract ID in the sidebar "
@@ -1060,7 +1341,7 @@ elif page == "Milestones":
     elif context["contract_summary"] is None:
         st.warning(
             context["contract_warning"]
-            or f"Contract #{current_contract} was not found."
+            or f"Contract #{active_contract_id} was not found."
         )
     else:
         summary = context["contract_summary"]
@@ -1089,7 +1370,7 @@ elif page == "Milestones":
                     border=True
                 ):
                     st.subheader(
-                        f"Contract #{current_contract}"
+                        f"Contract #{active_contract_id}"
                     )
                     with st.form(
                         "milestone_form"
@@ -1160,24 +1441,31 @@ elif page == "Milestones":
 
                             try:
                                 result = add_milestone(
-                                    current_contract,
+                                    active_contract_id,
                                     payload,
                                 )
                                 new_milestone_id = int(
                                     result["id"]
                                 )
                                 st.session_state[
+                                    "active_milestone_id"
+                                ] = new_milestone_id
+                                st.session_state[
                                     "_next_contract_id"
-                                ] = current_contract
+                                ] = active_contract_id
                                 st.session_state[
                                     "_next_milestone_id"
                                 ] = new_milestone_id
                                 st.session_state[
-                                    "milestone_title"
+                                    "_next_milestone_input"
+                                ] = str(new_milestone_id)
+                                set_context_notice(None)
+                                st.session_state[
+                                    "_next_milestone_title"
                                 ] = ""
                                 st.session_state[
-                                    "milestone_amount"
-                                ] = 0.0
+                                    "_next_milestone_amount"
+                                ] = 0.01
                                 set_flash(
                                     f"Milestone #{new_milestone_id} "
                                     "created successfully."
@@ -1187,7 +1475,7 @@ elif page == "Milestones":
                                 api_error(
                                     exc,
                                     not_found_message=(
-                                        f"Contract #{current_contract} "
+                                        f"Contract #{active_contract_id} "
                                         "was not found."
                                     ),
                                 )
@@ -1253,11 +1541,9 @@ elif page == "Payments":
         unsafe_allow_html=True,
     )
 
-    if current_milestone is None:
-        if milestone_invalid:
-            st.warning(
-                f"Milestone #{milestone_input.strip()} was not found."
-            )
+    if active_milestone_id is None:
+        if context["milestone_warning"]:
+            st.warning(context["milestone_warning"])
         else:
             st.info(
                 "Select a Milestone ID in the sidebar "
@@ -1266,7 +1552,7 @@ elif page == "Payments":
     elif context["milestone"] is None:
         st.warning(
             context["milestone_warning"]
-            or f"Milestone #{current_milestone} was not found."
+            or f"Milestone #{active_milestone_id} was not found."
         )
     else:
         milestone = context["milestone"]
@@ -1478,11 +1764,9 @@ elif page == "Workflow":
         unsafe_allow_html=True,
     )
 
-    if current_milestone is None:
-        if milestone_invalid:
-            st.warning(
-                f"Milestone #{milestone_input.strip()} was not found."
-            )
+    if active_milestone_id is None:
+        if context["milestone_warning"]:
+            st.warning(context["milestone_warning"])
         else:
             st.info(
                 "Select a Milestone ID in the sidebar "
@@ -1491,7 +1775,7 @@ elif page == "Workflow":
     elif context["milestone"] is None:
         st.warning(
             context["milestone_warning"]
-            or f"Milestone #{current_milestone} was not found."
+            or f"Milestone #{active_milestone_id} was not found."
         )
     else:
         milestone = context["milestone"]
