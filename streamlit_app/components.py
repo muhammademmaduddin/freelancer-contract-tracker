@@ -47,8 +47,9 @@ def info_row(label: str, value: str) -> str:
 
 
 def status_pill(status: str) -> str:
-    safe_status = html.escape(status)
-    display = status.replace("_", " ").title()
+    normalized = str(status or "unknown").lower()
+    safe_status = html.escape(normalized)
+    display = normalized.replace("_", " ").title()
 
     return (
         f'<span class="status-pill status-{safe_status}">'
@@ -67,20 +68,55 @@ def progress_bar(percent: float) -> str:
     )
 
 
-def workflow() -> str:
+def milestone_summary(
+    milestone_id: int,
+    title: str,
+    status: str,
+    value: str,
+    deadline: str,
+    contract_id: int,
+) -> str:
+    return (
+        '<div class="milestone-summary">'
+        '<div class="milestone-summary-heading">'
+        '<div>'
+        f'<div class="milestone-kicker">Milestone #{html.escape(str(milestone_id))}</div>'
+        f'<div class="milestone-summary-title">{html.escape(title)}</div>'
+        '</div>'
+        '<div class="milestone-current-status">'
+        '<span class="current-status-label">Current status</span>'
+        f'{status_pill(status)}'
+        '</div>'
+        '</div>'
+        '<div class="milestone-summary-details">'
+        f'<div><span>Milestone value</span><strong>{html.escape(value)}</strong></div>'
+        f'<div><span>Deadline</span><strong>{html.escape(deadline)}</strong></div>'
+        f'<div><span>Contract</span><strong>#{html.escape(str(contract_id))}</strong></div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def workflow(current_status: str | None = None) -> str:
     states = [
-        "Pending",
-        "In Progress",
-        "Submitted",
-        "Approved",
-        "Paid",
+        ("pending", "Pending"),
+        ("in_progress", "In Progress"),
+        ("submitted", "Submitted"),
+        ("approved", "Approved"),
+        ("paid", "Paid"),
     ]
 
+    normalized_status = str(current_status or "").lower()
     items = []
 
-    for index, state in enumerate(states):
+    for index, (status, label) in enumerate(states):
+        active_class = (
+            " workflow-step-active"
+            if status == normalized_status
+            else ""
+        )
         items.append(
-            f'<span class="workflow-step">{state}</span>'
+            f'<span class="workflow-step{active_class}">{label}</span>'
         )
 
         if index < len(states) - 1:
@@ -88,4 +124,28 @@ def workflow() -> str:
                 '<span class="workflow-arrow">→</span>'
             )
 
-    return '<div class="workflow">' + "".join(items) + '</div>'
+    disputed_class = (
+        " workflow-disputed-step-active"
+        if normalized_status == "disputed"
+        else ""
+    )
+
+    return (
+        '<div class="workflow">'
+        + "".join(items)
+        + '</div>'
+        + '<div class="workflow-dispute-branch">'
+        + '<div class="workflow-dispute-row">'
+        + '<span class="workflow-branch-label">Submitted</span>'
+        + '<span class="workflow-branch-arrow">↓</span>'
+        + f'<span class="workflow-disputed-step{disputed_class}">Disputed</span>'
+        + '</div>'
+        + '<div class="workflow-dispute-return">'
+        + '<span>↙</span>'
+        + '<span>In Progress</span>'
+        + '<span class="workflow-branch-separator">/</span>'
+        + '<span>Submitted</span>'
+        + '<span>↘</span>'
+        + '</div>'
+        + '</div>'
+    )

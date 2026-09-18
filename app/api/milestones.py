@@ -71,3 +71,25 @@ def get_overdue_milestones_endpoint(
         )
         for milestone in milestones
     ]
+
+
+@router.get(
+    "/{milestone_id}",
+    response_model=MilestoneResponse,
+)
+def get_milestone_endpoint(
+    milestone_id: int,
+    db: Session = Depends(get_db),
+):
+    milestone = get_milestone_by_id(
+        db,
+        milestone_id,
+    )
+
+    if milestone is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Milestone not found.",
+        )
+
+    return milestone

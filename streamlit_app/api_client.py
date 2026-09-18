@@ -32,7 +32,10 @@ def _handle_request(
 
         return response.json()
 
-    except requests.ConnectionError as exc:
+    except requests.HTTPError:
+        raise
+
+    except requests.RequestException as exc:
         raise BackendUnavailable(
             "Cannot connect to the backend API. "
             "Make sure FastAPI is running."
@@ -62,6 +65,13 @@ def add_milestone(
         "POST",
         f"/contracts/{contract_id}/milestones",
         json=payload,
+    )
+
+
+def get_milestone(milestone_id: int):
+    return _handle_request(
+        "GET",
+        f"/milestones/{milestone_id}",
     )
 
 
